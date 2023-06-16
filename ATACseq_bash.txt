@@ -1,0 +1,43 @@
+# Remove mitochondrial reads
+samtools view -h HDAC-cOE-DES3.sorted.bam | sed '/\tchrM\t/d' | samtools view -S -b - > HDAC-cOE-DES3.nochrM.bam
+samtools view -h atac_WJ1_CO1.bam | sed '/\tchrM\t/d' | samtools view -S -b - > atac_WJ1_CO1.nochrM.bam
+samtools view -h atac_WJ2_CO3.bam | sed '/\tchrM\t/d' | samtools view -S -b - > atac_WJ2_CO3.nochrM.bam
+samtools view -h atac_WJ3_DES5.bam | sed '/\tchrM\t/d' | samtools view -S -b - > atac_WJ3_DES5.nochrM.bam
+samtools view -h atac_WJ4_DES6.bam | sed '/\tchrM\t/d' | samtools view -S -b - > atac_WJ4_DES6.nochrM.bam
+
+samtools view -h NS291_NaCl_G41H6_nodups.bam | sed '/\tchrM\t/d' | samtools view -S -b - > NS291_NaCl_G41H6_nochrM.bam
+
+
+# Deduplicate with picard tools
+for file in *nochrM.bam; do echo srun --partition=bioinfo --cpus-per-task=8 java -jar /ddn/gs1/home/delkerda/tools/picard/picard.jar MarkDuplicates I="${file}" O="${file/nochrM.bam/nodups.bam}" remove_duplicates=TRUE M="${file/nochrM.bam/dup_metrics.txt}"; done
+
+# Extract open chromatin
+bedtools bamtobed -i WT-CON5.nodups.bam | awk '{ if($6=="+") print $1 "\t" $2 "\t" $2+9; else if($6=="-") print $1 "\t" $3-9 "\t" $3; }' > WT-CON5.bed
+bedtools bamtobed -i WT-CON6.nodups.bam | awk '{ if($6=="+") print $1 "\t" $2 "\t" $2+9; else if($6=="-") print $1 "\t" $3-9 "\t" $3; }' > WT-CON6.bed
+bedtools bamtobed -i WT-DES1.nodups.bam | awk '{ if($6=="+") print $1 "\t" $2 "\t" $2+9; else if($6=="-") print $1 "\t" $3-9 "\t" $3; }' > WT-DES1.bed
+bedtools bamtobed -i WT-DES2.nodups.bam | awk '{ if($6=="+") print $1 "\t" $2 "\t" $2+9; else if($6=="-") print $1 "\t" $3-9 "\t" $3; }' > WT-DES2.bed
+
+# Generate coverage file
+bedtools genomecov -i HDAC-cOE-CON7.bed -g mm10_chrom_sizes.txt -bg > HDAC-cOE-CON7.bg
+bedtools genomecov -i HDAC-cOE-CON8.bed -g mm10_chrom_sizes.txt -bg > HDAC-cOE-CON8.bg
+bedtools genomecov -i HDAC-cOE-DES3.bed -g mm10_chrom_sizes.txt -bg > HDAC-cOE-DES3.bg
+bedtools genomecov -i HDAC-cOE-DES4.bed -g mm10_chrom_sizes.txt -bg > HDAC-cOE-DES4.bg
+
+# Normalize coverage
+cat HDAC-cOE-DES3.bg | awk '{ print $1 "\t" $2 "\t" $3 "\t" $4*100000000/93812471 }' > HDAC-cOE-DES3_norm.bg
+cat HDAC-cOE-DES4.bg | awk '{ print $1 "\t" $2 "\t" $3 "\t" $4*100000000/78620012 }' > HDAC-cOE-DES4_norm.bg
+cat HDAC-cOE-CON7.bg | awk '{ print $1 "\t" $2 "\t" $3 "\t" $4*100000000/134502142 }' > HDAC-cOE-CON7_norm.bg
+cat HDAC-cOE-CON8.bg | awk '{ print $1 "\t" $2 "\t" $3 "\t" $4*100000000/74396970 }' > HDAC-cOE-CON8_norm.bg
+
+# Sort normalized bedgraph files 
+LC_COLLATE=C sort -k1,1 -k2,2n cOE-co1_norm.bg > cOE-co1_sorted.bg
+for file in *norm.bg; do echo LC_COLLATE=C sort -k1,1 -k2,2n "${file}" > "${file/norm.bg/sorted.bg}"; done
+
+# Make bigWig browser tracks
+bedGraphToBigWig cOEco1_sorted.bg mm10_chrom-sizes.txt cOEco1.bw
+for file in *_sorted.bg; do echo bedGraphToBigWig "${file}" mm10_chrom_sizes.txt "${file/_sorted.bg/.bw}"; done
+
+
+
+# Previous working directory
+/ddn/gs1/project/nextgen/post/williamsc5/NS51272-Williams-Gu/mm10_alignments/bamFiles
